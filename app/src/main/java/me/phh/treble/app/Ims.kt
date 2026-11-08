@@ -88,15 +88,28 @@ object Ims: EntryStartup {
 
     override fun startup(ctxt: Context) {
         if (!ImsSettings.enabled()) return
-        val gotFloss = ctxt.packageManager.getInstalledPackages(0).find { it.packageName == "me.phh.ims" } != null
 
         val sp = PreferenceManager.getDefaultSharedPreferences(ctxt)
         sp.registerOnSharedPreferenceChangeListener(spListener)
 
         this.ctxt = WeakReference(ctxt.applicationContext)
 
-        val allOverlays = listOf("me.phh.treble.overlay.mtkims_telephony", "me.phh.treble.overlay.cafims_telephony", "me.phh.treble.overlay.hwims_telephony")
+        selectImsOverlay(ctxt)
+
+        //Refresh parameters on boot
+        spListener.onSharedPreferenceChanged(sp, ImsSettings.requestNetwork)
+    }
+
+    // com.android.phone reads config_ims_mmtel_package only at start, so this must run before the next boot
+    fun selectImsOverlay(ctxt: Context) {
+        val installed = ctxt.packageManager.getInstalledPackages(0).map { it.packageName }
+        val gotLangsdorffFloss = "com.langsdorff.flossims" in installed
+        val gotFloss = gotLangsdorffFloss || "me.phh.ims" in installed
+
+        val allOverlays = listOf("me.phh.treble.overlay.mtkims_telephony", "me.phh.treble.overlay.cafims_telephony", "me.phh.treble.overlay.hwims_telephony",
+                "me.phh.treble.overlay.flossims_telephony", "com.langsdorff.overlay.ims_telephony")
         val selectOverlay = when {
+            gotLangsdorffFloss -> "com.langsdorff.overlay.ims_telephony"
             gotFloss -> "me.phh.treble.overlay.flossims_telephony"
             gotMtkP || gotMtkQ || gotMtkR || gotMtkS || gotMtkAidl -> "me.phh.treble.overlay.mtkims_telephony"
             gotQcomHidl || gotQcomAidl -> "me.phh.treble.overlay.cafims_telephony"
@@ -116,8 +129,5 @@ object Ims: EntryStartup {
                     .forEach { OverlayPicker.setOverlayEnabled(it, false) }
             OverlayPicker.setOverlayEnabled(selectOverlay, true)
         }
-
-        //Refresh parameters on boot
-        spListener.onSharedPreferenceChanged(sp, ImsSettings.requestNetwork)
     }
 }

@@ -2,13 +2,19 @@ apply plugin: 'com.android.application'
 
 apply plugin: 'kotlin-android'
 
+// seconds since epoch: strictly increasing so sideloaded test builds always
+// count as an update over the shipped system app
+def buildVersionCode = (int) (System.currentTimeMillis().intdiv(1000))
+
 android {
     compileSdkVersion 33
     defaultConfig {
         applicationId "me.phh.treble.app"
         minSdkVersion 27
         targetSdkVersion 33
-        versionCode 1
+        // seconds since epoch: strictly increasing so sideloaded test builds
+        // always count as an update over the shipped system app
+        versionCode buildVersionCode
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }

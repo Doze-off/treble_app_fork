@@ -21,12 +21,13 @@ object MiscSettings : Settings {
     val disableButtonsBacklight = "key_misc_disable_buttons_backlight"
     val forceNavbarOff = "key_misc_force_navbar_off"
     val bluetooth = "key_misc_bluetooth"
+    val activityAnimPerfOverride = "key_misc_activity_anim_perf_override"
+    val forceSwCodecs = "key_misc_force_sw_codecs"
     val securize = "key_misc_securize"
-    val secureAdb = "key_misc_secure_adb"
     val removeTelephony = "key_misc_removetelephony"
-    val remotectl = "key_misc_remotectl"
     val disableAudioEffects = "key_misc_disable_audio_effects"
     val disableFastAudio = "key_misc_disable_fast_audio"
+    val lmkTweaks = "key_misc_lmk_tweaks"
     val cameraTimestampOverride = "key_misc_camera_timestamp"
     val sysbta = "key_misc_dynamic_sysbta"
     val noHwcomposer = "key_misc_no_hwcomposer"
@@ -37,20 +38,31 @@ object MiscSettings : Settings {
     var patchSmsc = "key_misc_patch_smsc";
     val minimalBrightness = "key_misc_minimal_brightness"
     val aod = "key_misc_aod"
+    val disableDisplayDozeSuspend = "key_misc_disable_display_doze_suspend"
     val dt2w = "key_misc_dt2w"
     val restartSystemUI = "key_misc_restart_systemui"
     val fodColor = "key_misc_fod_color"
     val mtkTouchHintIsRotate = "key_misc_mediatek_touch_hint_rotate"
     val mtkGedKpi = "key_misc_mediatek_ged_kpi"
     val allowBinderThread = "key_misc_allow_binder_thread_on_incoming_calls"
+    val statusbarpaddingtop = "key_misc_sb_padding_top"
+    val statusbarpaddingstart = "key_misc_sb_padding_start"
+    val statusbarpaddingend = "key_misc_sb_padding_end"
+    val statusbarpaddingbottom = "key_misc_sb_padding_bottom"
+    val qsclockleftpadding = "key_misc_qs_clock_left_padding"
+    val qsclockrightpadding = "key_misc_qs_clock_right_padding"
     val lowGammaBrightness = "key_misc_low_gamma_brightness"
     val linearBrightness = "key_misc_linear_brightness"
     val forceDisplay5g = "key_misc_force_display_5g"
     val disableVoiceCallIn = "key_misc_disable_voice_call_in"
     val disableSfGlBackpressure = "key_misc_disable_sf_gl_backpressure"
     val disableSfHwcBackpressure = "key_misc_disable_sf_hwc_backpressure"
+    val sfAutoLatchUnsignaled = "key_misc_sf_auto_latch_unsignaled"
+    val sfDisableBackpressure = "key_misc_sf_disable_backpressure"
+    val sfLatchUnsignaled = "key_misc_sf_latch_unsignaled"
     val disableSaeUpgrade = "key_misc_disable_sae_upgrade"
     val escoTransportUnitSize = "key_misc_esco_transport_unit_size"
+    val disableLeApcfExtended = "key_misc_disable_le_apcfe"
     val treatVirtualSensorsAsReal = "key_misc_treat_virtual_sensors_as_real"
 
     override fun enabled() = true
@@ -60,39 +72,6 @@ class MiscSettingsFragment : SettingsFragment() {
     override val preferencesResId = R.xml.pref_misc
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         super.onCreatePreferences(savedInstanceState, rootKey)
-
-        val securizePref = findPreference<Preference>(MiscSettings.securize)
-        securizePref!!.setOnPreferenceClickListener {
-                val builder = AlertDialog.Builder( this.getActivity() )
-                builder.setTitle(getString(R.string.remove_root))
-                builder.setMessage(getString(R.string.continue_question))
-
-                builder.setPositiveButton(android.R.string.yes) { dialog, which ->
-
-                var cmds = listOf(
-                    arrayOf("/sbin/su", "-c", "/system/bin/phh-securize.sh"),
-                    arrayOf("/system/xbin/su", "-c", "/system/bin/phh-securize.sh"),
-                    arrayOf("/system/xbin/phh-su", "-c", "/system/bin/phh-securize.sh"),
-                    arrayOf("/sbin/su", "0", "/system/bin/phh-securize.sh"),
-                    arrayOf("/system/xbin/su", "0", "/system/bin/phh-securize.sh"),
-                    arrayOf("/system/xbin/phh-su", "0", "/system/bin/phh-securize.sh")
-                )
-                for (cmd in cmds) {
-                    try {
-                        Runtime.getRuntime().exec(cmd).waitFor()
-                        break
-                    } catch (t: Throwable) {
-                        Log.d("PHH", "Failed to exec \"" + cmd.joinToString(separator = " ") + "\", skipping")
-                    }
-                }
-            }
-
-            builder.setNegativeButton(android.R.string.no) { dialog, which ->
-            }
-
-            builder.show()
-            return@setOnPreferenceClickListener true
-        }
 
         val removeTelephonyPref = findPreference<Preference>(MiscSettings.removeTelephony)
         removeTelephonyPref!!.setOnPreferenceClickListener {

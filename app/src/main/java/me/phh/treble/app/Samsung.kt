@@ -80,6 +80,18 @@ class Samsung: EntryStartup {
                 val value = sp.getBoolean(key, false)
                 SystemProperties.set("persist.sys.phh.samsung.camera_ids", value.toString())
             }
+            SamsungSettings.remosaic -> {
+                val value = sp.getBoolean(key, false)
+                SystemProperties.set("persist.sys.phh.samsung.remosaic", value.toString())
+            }
+            SamsungSettings.video60 -> {
+                val value = sp.getBoolean(key, false)
+                SystemProperties.set("persist.sys.phh.samsung.video60", value.toString())
+            }
+            SamsungSettings.video60GrapheneOS -> {
+                val value = sp.getBoolean(key, false)
+                SystemProperties.set("persist.sys.phh.samsung.video60_grapheneos", value.toString())
+            }
             SamsungSettings.alternateAudioPolicy -> {
                 val b = sp.getBoolean(key, false)
                 val value = if(b) "1" else "0"
@@ -129,6 +141,30 @@ class Samsung: EntryStartup {
 
         sp.registerOnSharedPreferenceChangeListener(spListener)
 
+        val fpDevice = Tools.vendorFpLow.split("/").getOrNull(2)?.substringBefore(":")
+        if (Tools.vendorFpLow.startsWith("samsung/") && fpDevice == "a14" && !sp.getBoolean(a14DefaultsApplied, false)) {
+            sp.edit()
+                .putBoolean(SamsungSettings.doubleTapToWake, true)
+                .putBoolean(SamsungSettings.remosaic, true)
+                .putBoolean(SamsungSettings.video60, true)
+                .putBoolean(SamsungSettings.video60GrapheneOS, true)
+                .putBoolean(SamsungSettings.cameraIds, true)
+                .putBoolean(SamsungSettings.disableBackMic, true)
+                .putString(SamsungSettings.flashStrength, "5")
+                .putBoolean(MiscSettings.linearBrightness, true)
+                .putBoolean(MiscSettings.disableSaeUpgrade, true)
+                .putBoolean(MiscSettings.patchSmsc, false)
+                .putBoolean(MiscSettings.disableSfGlBackpressure, true)
+                .putBoolean(MiscSettings.disableSfHwcBackpressure, true)
+                .putBoolean(MiscSettings.sfDisableBackpressure, true)
+                .putBoolean(MiscSettings.sfLatchUnsignaled, true)
+                .putBoolean(MiscSettings.sfAutoLatchUnsignaled, true)
+                .putBoolean(MiscSettings.headsetDevinput, true)
+                .putString(MiscSettings.escoTransportUnitSize, "16")
+                .putBoolean(a14DefaultsApplied, true)
+                .commit()
+        }
+
         //Refresh parameters on boot
         spListener.onSharedPreferenceChanged(sp, SamsungSettings.highBrightess)
         spListener.onSharedPreferenceChanged(sp, SamsungSettings.gloveMode)
@@ -152,6 +188,7 @@ class Samsung: EntryStartup {
     }
 
     companion object: EntryStartup {
+        val a14DefaultsApplied = "key_samsung_a14_defaults_applied"
         val tspBase = "/sys/devices/virtual/sec/tsp"
         fun tsCmd(cmd: String): String {
             File("${tspBase}/cmd").writeText(cmd+"\n")

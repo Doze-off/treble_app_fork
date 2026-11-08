@@ -29,6 +29,7 @@ object ImsSettings : Settings {
     val createApn = "key_ims_create_apn"
     val forceEnableSettings = "key_ims_force_enable_setting"
     val installImsApk = "key_ims_install_apn"
+    val flossLangsdorffUrl = "https://github.com/clangsdorff/ims/releases/latest/download/FlossIms.apk"
 
     fun checkHasPhhSignature(): Boolean {
         try {
@@ -130,76 +131,99 @@ class ImsSettingsFragment : SettingsFragment() {
                     Ims.gotQcomHidlMoto -> Pair("https://treble.phh.me/stable/ims-caf-moto$signSuffix.apk", "Qualcomm pre-S vendor (Motorola)")
                     Ims.gotQcomHidl -> Pair("https://treble.phh.me/stable/ims-q.64$signSuffix.apk", "Qualcomm pre-S vendor")
                     Ims.gotQcomAidl -> Pair("https://treble.phh.me/stable/ims-caf-s$signSuffix.apk", "Qualcomm S+ vendor")
-                    else -> Pair("https://treble.phh.me/floss-ims-resigned.apk", "Floss IMS (EXPERIMENTAL)")
+                    else -> Pair("https://treble.phh.me/floss-ims-resigned.apk", "phh FlossIMS")
                 }
 
         installIms!!.title = "Install IMS APK for $message"
         installIms!!.setOnPreferenceClickListener {
-            val dm = activity.getSystemService(DownloadManager::class.java)
-
-            val downloadRequest = DownloadManager.Request(Uri.parse(url))
-            downloadRequest.setTitle("IMS APK")
-            downloadRequest.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-
-            downloadRequest.setDestinationInExternalFilesDir(activity, Environment.DIRECTORY_DOWNLOADS, "ims.apk")
-
-            val myId = dm!!.enqueue(downloadRequest)
-
-            activity.registerReceiver(object: BroadcastReceiver() {
-                override fun onReceive(context: Context, intent: Intent) {
-                    Log.d("PHH", "Received download completed with intent $intent ${intent.data}")
-                    if(intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L) != myId) return
-
-                    val query = DownloadManager.Query().setFilterById(myId)
-                    val cursor = dm.query(query)
-                    if(!cursor.moveToFirst()) {
-                        Log.d("PHH", "DownloadManager gave us an empty cursor")
-                        return
-                    }
-
-                    val localUri = Uri.parse(cursor.getString(cursor.getColumnIndex(DownloadManager.COLUMN_LOCAL_URI)))
-                    Log.d("PHH", "Got localURI = $localUri")
-                    val filename = localUri.lastPathSegment
-                    val path = localUri.path!!
-                    val pi = context.packageManager.packageInstaller
-                    val sessionId = pi.createSession(PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL))
-                    val session = pi.openSession(sessionId)
-
-                    Misc.safeSetprop("persist.vendor.vilte_support", "0")
-
-                    session.openWrite("hello", 0, -1).use { output ->
-                        FileInputStream(path).use { input ->
-                            val buf = ByteArray(512*1024)
-                            while(input.available()>0) {
-                                val l = input.read(buf)
-                                output.write(buf, 0, l)
-                            }
-                            session.fsync(output)
-                        }
-                    }
-
-                    activity.registerReceiver(
-                            object: BroadcastReceiver() {
-                                override fun onReceive(p0: Context?, intet: Intent?) {
-                                    Log.e("PHH", "Apk install received $intent" )
-                                    Toast.makeText(p0, "IMS apk installed! You may now reboot.", Toast.LENGTH_LONG).show()
-                                }
-                            },
-                            IntentFilter("me.phh.treble.app.ImsInstalled")
-                    )
-
-                    session.commit(
-                            PendingIntent.getBroadcast(
-                                    this@ImsSettingsFragment.activity,
-                                    1,
-                                    Intent("me.phh.treble.app.ImsInstalled"),
-                                    PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE).intentSender)
-                    activity.unregisterReceiver(this)
-                }
-
-            }, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE))
-
+            val choices = arrayOf(
+                    Pair(url, message),
+                    Pair(ImsSettings.flossLangsdorffUrl, "Alternative FlossIMS"))
+            AlertDialog.Builder(activity)
+                    .setTitle("Download and install IMS APK")
+                    .setItems(choices.map { it.second }.toTypedArray()) { _, which -> downloadAndInstallIms(choices[which].first) }
+                    .show()
             return@setOnPreferenceClickListener true
         }
+    }
+
+    private fun downloadAndInstallIms(url: String) {
+        val dm = activity.getSystemService(DownloadManager::class.java)
+
+        val downloadRequest = DownloadManager.Request(Uri.parse(url))
+        downloadRequest.setTitle("IMS APK")
+        downloadRequest.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+
+        downloadRequest.setDestinationInExternalFilesDir(activity, Environment.DIRECTORY_DOWNLOADS, "ims.apk")
+
+        val myId: Long
+        try {
+            myId = dm!!.enqueue(downloadRequest)
+        } catch (e: Exception) {
+            Toast.makeText(activity, "IMS download failed: " + e.message, Toast.LENGTH_LONG).show()
+            return
+        }
+
+        activity.registerReceiver(object: BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                Log.d("PHH", "Received download completed with intent $intent ${intent.data}")
+                if(intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L) != myId) return
+
+                val query = DownloadManager.Query().setFilterById(myId)
+                val cursor = dm.query(query)
+                if(!cursor.moveToFirst()) {
+                    Log.d("PHH", "DownloadManager gave us an empty cursor")
+                    return
+                }
+
+                val localUri = Uri.parse(cursor.getString(cursor.getColumnIndex(DownloadManager.COLUMN_LOCAL_URI)))
+                Log.d("PHH", "Got localURI = $localUri")
+                val filename = localUri.lastPathSegment
+                val path = localUri.path!!
+                val pi = context.packageManager.packageInstaller
+                val sessionId = pi.createSession(PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL))
+                val session = pi.openSession(sessionId)
+
+                Misc.safeSetprop("persist.vendor.vilte_support", "0")
+
+                session.openWrite("hello", 0, -1).use { output ->
+                    FileInputStream(path).use { input ->
+                        val buf = ByteArray(512*1024)
+                        while(input.available()>0) {
+                            val l = input.read(buf)
+                            output.write(buf, 0, l)
+                        }
+                        session.fsync(output)
+                    }
+                }
+
+                activity.registerReceiver(
+                        object: BroadcastReceiver() {
+                            override fun onReceive(p0: Context, result: Intent) {
+                                val status = result.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)
+                                Log.e("PHH", "Apk install received $result status $status")
+                                if (status != PackageInstaller.STATUS_SUCCESS) {
+                                    val msg = result.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
+                                    Toast.makeText(p0, "IMS apk install failed: $msg", Toast.LENGTH_LONG).show()
+                                    return
+                                }
+                                Ims.selectImsOverlay(p0)
+                                Toast.makeText(p0, "IMS apk installed! You may now reboot.", Toast.LENGTH_LONG).show()
+                            }
+                        },
+                        IntentFilter("me.phh.treble.app.ImsInstalled"),
+                        Context.RECEIVER_NOT_EXPORTED
+                )
+
+                session.commit(
+                        PendingIntent.getBroadcast(
+                                this@ImsSettingsFragment.activity,
+                                1,
+                                Intent("me.phh.treble.app.ImsInstalled").setPackage(context.packageName),
+                                PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_MUTABLE).intentSender)
+                activity.unregisterReceiver(this)
+            }
+
+        }, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE), Context.RECEIVER_EXPORTED)
     }
 }
