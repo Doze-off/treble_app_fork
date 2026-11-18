@@ -97,20 +97,20 @@ class ImsSettingsFragment : SettingsFragment() {
 
         // the package ships disabled, so its enabled state is the source of truth, not the preference
         val useImsStack = findPreference<SwitchPreferenceCompat>(ImsSettings.useImsStack)
-        useImsStack!!.isChecked = Ims.isImsStackEnabled(requireActivity().packageManager)
+        useImsStack!!.isChecked = Ims.isImsStackEnabled(activity!!.packageManager)
         useImsStack.setOnPreferenceChangeListener { _, newValue ->
-            val ctxt = requireActivity().applicationContext
+            val ctxt = activity!!.applicationContext
             val state = if (newValue as Boolean) PackageManager.COMPONENT_ENABLED_STATE_ENABLED
-                    else PackageManager.COMPONENT_ENABLED_STATE_DEFAULT
-            try {
-                ctxt.packageManager.setApplicationEnabledSetting(ImsSettings.imsStackPackage, state, 0)
-            } catch (e: IllegalArgumentException) {
-                Toast.makeText(ctxt, "AOSP IMS stack is not part of this build", Toast.LENGTH_LONG).show()
-                return@setOnPreferenceChangeListener false
-            }
-            Ims.selectImsOverlay(ctxt)
-            Toast.makeText(ctxt, "Reboot to apply the IMS change", Toast.LENGTH_LONG).show()
-            true
+            else PackageManager.COMPONENT_ENABLED_STATE_DEFAULT
+                try {
+                    ctxt.packageManager.setApplicationEnabledSetting(ImsSettings.imsStackPackage, state, 0)
+                } catch (e: IllegalArgumentException) {
+                    Toast.makeText(ctxt, "AOSP IMS stack is not part of this build", Toast.LENGTH_LONG).show()
+                    return@setOnPreferenceChangeListener false
+                }
+                Ims.selectImsOverlay(ctxt)
+                Toast.makeText(ctxt, "Reboot to apply the IMS change", Toast.LENGTH_LONG).show()
+                true
         }
 
         val installIms = findPreference<Preference>(ImsSettings.installImsApk)
