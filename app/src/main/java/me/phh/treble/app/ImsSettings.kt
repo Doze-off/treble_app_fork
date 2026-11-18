@@ -135,7 +135,7 @@ class ImsSettingsFragment : SettingsFragment() {
 
     // DownloadManager fails with FILE_ERROR on some devices, stream straight into the session
     private fun downloadAndInstallIms(url: String) {
-        val ctxt = requireActivity().applicationContext
+        val ctxt = activity!!.applicationContext
         val main = Handler(Looper.getMainLooper())
         Toast.makeText(ctxt, "Downloading IMS APK...", Toast.LENGTH_SHORT).show()
 
@@ -143,16 +143,21 @@ class ImsSettingsFragment : SettingsFragment() {
             val pi = ctxt.packageManager.packageInstaller
             var sessionId = -1
             try {
-                sessionId = pi.createSession(PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL))
+                sessionId = pi.createSession(
+                    PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
+                )
                 pi.openSession(sessionId).use { session ->
                     val conn = URL(url).openConnection() as HttpURLConnection
                     try {
                         if (conn.responseCode != HttpURLConnection.HTTP_OK)
                             throw IOException("HTTP ${conn.responseCode}")
-                        session.openWrite("ims.apk", 0, conn.contentLengthLong).use { output ->
-                            conn.inputStream.use { it.copyTo(output, 512*1024) }
-                            session.fsync(output)
-                        }
+
+                            session.openWrite("ims.apk", 0, conn.contentLengthLong).use { output ->
+                                conn.inputStream.use { input ->
+                                    input.copyTo(output, 512 * 1024)
+                                }
+                                session.fsync(output)
+                            }
                     } finally {
                         conn.disconnect()
                     }
@@ -160,37 +165,43 @@ class ImsSettingsFragment : SettingsFragment() {
                     Misc.safeSetprop("persist.vendor.vilte_support", "0")
 
                     ctxt.registerReceiver(
-                            object: BroadcastReceiver() {
-                                override fun onReceive(p0: Context, result: Intent) {
-                                    ctxt.unregisterReceiver(this)
-                                    val status = result.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)
-                                    Log.e("PHH", "Apk install received $result status $status")
-                                    if (status != PackageInstaller.STATUS_SUCCESS) {
-                                        val msg = result.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
-                                        Toast.makeText(p0, "IMS apk install failed: $msg", Toast.LENGTH_LONG).show()
-                                        return
-                                    }
-                                    Ims.selectImsOverlay(p0)
-                                    Toast.makeText(p0, "IMS apk installed! You may now reboot.", Toast.LENGTH_LONG).show()
+                        object : BroadcastReceiver() {
+                            override fun onReceive(p0: Context, result: Intent) {
+                                ctxt.unregisterReceiver(this)
+                                val status = result.getIntExtra(
+                                    PackageInstaller.EXTRA_STATUS,
+                                    PackageInstaller.STATUS_FAILURE
+                                )
+                                Log.e("PHH", "Apk install received $result status $status")
+                                if (status != PackageInstaller.STATUS_SUCCESS) {
+                                    val msg = result.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
+                                    Toast.makeText(p0, "IMS apk install failed: $msg", Toast.LENGTH_LONG).show()
+                                    return
                                 }
-                            },
-                            IntentFilter("me.phh.treble.app.ImsInstalled"),
-                            Context.RECEIVER_NOT_EXPORTED
+                                Ims.selectImsOverlay(p0)
+                                Toast.makeText(p0, "IMS apk installed! You may now reboot.", Toast.LENGTH_LONG).show()
+                            }
+                        },
+                        IntentFilter("me.phh.treble.app.ImsInstalled"),
+                                          Context.RECEIVER_NOT_EXPORTED
                     )
 
                     session.commit(
-                            PendingIntent.getBroadcast(
-                                    ctxt,
-                                    1,
-                                    Intent("me.phh.treble.app.ImsInstalled").setPackage(ctxt.packageName),
-                                    PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_MUTABLE).intentSender)
+                        PendingIntent.getBroadcast(
+                            ctxt,
+                            1,
+                            Intent("me.phh.treble.app.ImsInstalled").setPackage(ctxt.packageName),
+                                                   PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_MUTABLE
+                        ).intentSender
+                    )
                 }
             } catch (e: Exception) {
                 Log.e("PHH", "IMS download failed", e)
                 if (sessionId != -1) pi.abandonSession(sessionId)
-                main.post { Toast.makeText(ctxt, "IMS download failed: " + e.message, Toast.LENGTH_LONG).show() }
+                    main.post {
+                        Toast.makeText(ctxt, "IMS download failed: " + e.message, Toast.LENGTH_LONG).show()
+                    }
             }
-
         }.start()
     }
 }
