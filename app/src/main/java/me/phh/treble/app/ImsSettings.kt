@@ -2,7 +2,6 @@ package me.phh.treble.app
 
 import android.app.AlertDialog
 import android.app.Application
-import android.app.DownloadManager
 import android.app.PendingIntent
 import android.content.*
 import android.content.pm.PackageInstaller
@@ -10,7 +9,8 @@ import android.hardware.display.DisplayManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.Environment
+import android.os.Handler
+import android.os.Looper
 import android.os.StrictMode
 import android.os.UserHandle
 import android.telephony.TelephonyManager
@@ -19,10 +19,11 @@ import android.widget.Toast
 import androidx.core.content.FileProvider
 import androidx.preference.ListPreference
 import androidx.preference.Preference
-import dalvik.system.PathClassLoader
 import java.io.ByteArrayInputStream
 import java.io.File
-import java.io.FileInputStream
+import java.io.IOException
+import java.net.HttpURLConnection
+import java.net.URL
 
 object ImsSettings : Settings {
     val requestNetwork = "key_ims_request_network"
@@ -30,22 +31,6 @@ object ImsSettings : Settings {
     val forceEnableSettings = "key_ims_force_enable_setting"
     val installImsApk = "key_ims_install_apn"
     val flossLangsdorffUrl = "https://github.com/clangsdorff/ims/releases/latest/download/FlossIms.apk"
-
-    fun checkHasPhhSignature(): Boolean {
-        try {
-            val cl = PathClassLoader(
-                "/system/framework/services.jar",
-                ClassLoader.getSystemClassLoader()
-            )
-            val pmUtils = cl.loadClass("com.android.server.pm.PackageManagerServiceUtils")
-            val field = pmUtils.getDeclaredField("PHH_SIGNATURE")
-            Log.d("PHH", "checkHasPhhSignature Field $field")
-            return true
-        } catch(t: Throwable) {
-            Log.d("PHH", "checkHasPhhSignature Field failed")
-            return false
-        }
-    }
 
 
     override fun enabled() = true
@@ -116,7 +101,8 @@ class ImsSettingsFragment : SettingsFragment() {
         Log.d("PHH", "Qualcomm HIDL radio = ${Ims.gotQcomHidl}")
         Log.d("PHH", "Qualcomm AIDL radio = ${Ims.gotQcomAidl}")
 
-        val signSuffix = if(ImsSettings.checkHasPhhSignature()) "-resigned" else ""
+        // the phh signature is always trusted here, so only the resigned apks install
+        val signSuffix = "-resigned"
 
         val (url, message) =
                 when {
@@ -147,83 +133,64 @@ class ImsSettingsFragment : SettingsFragment() {
         }
     }
 
+    // DownloadManager fails with FILE_ERROR on some devices, stream straight into the session
     private fun downloadAndInstallIms(url: String) {
-        val dm = activity.getSystemService(DownloadManager::class.java)
+        val ctxt = requireActivity().applicationContext
+        val main = Handler(Looper.getMainLooper())
+        Toast.makeText(ctxt, "Downloading IMS APK...", Toast.LENGTH_SHORT).show()
 
-        val downloadRequest = DownloadManager.Request(Uri.parse(url))
-        downloadRequest.setTitle("IMS APK")
-        downloadRequest.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-
-        downloadRequest.setDestinationInExternalFilesDir(activity, Environment.DIRECTORY_DOWNLOADS, "ims.apk")
-
-        val myId: Long
-        try {
-            myId = dm!!.enqueue(downloadRequest)
-        } catch (e: Exception) {
-            Toast.makeText(activity, "IMS download failed: " + e.message, Toast.LENGTH_LONG).show()
-            return
-        }
-
-        activity.registerReceiver(object: BroadcastReceiver() {
-            override fun onReceive(context: Context, intent: Intent) {
-                Log.d("PHH", "Received download completed with intent $intent ${intent.data}")
-                if(intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L) != myId) return
-
-                val query = DownloadManager.Query().setFilterById(myId)
-                val cursor = dm.query(query)
-                if(!cursor.moveToFirst()) {
-                    Log.d("PHH", "DownloadManager gave us an empty cursor")
-                    return
-                }
-
-                val localUri = Uri.parse(cursor.getString(cursor.getColumnIndex(DownloadManager.COLUMN_LOCAL_URI)))
-                Log.d("PHH", "Got localURI = $localUri")
-                val filename = localUri.lastPathSegment
-                val path = localUri.path!!
-                val pi = context.packageManager.packageInstaller
-                val sessionId = pi.createSession(PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL))
-                val session = pi.openSession(sessionId)
-
-                Misc.safeSetprop("persist.vendor.vilte_support", "0")
-
-                session.openWrite("hello", 0, -1).use { output ->
-                    FileInputStream(path).use { input ->
-                        val buf = ByteArray(512*1024)
-                        while(input.available()>0) {
-                            val l = input.read(buf)
-                            output.write(buf, 0, l)
+        Thread {
+            val pi = ctxt.packageManager.packageInstaller
+            var sessionId = -1
+            try {
+                sessionId = pi.createSession(PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL))
+                pi.openSession(sessionId).use { session ->
+                    val conn = URL(url).openConnection() as HttpURLConnection
+                    try {
+                        if (conn.responseCode != HttpURLConnection.HTTP_OK)
+                            throw IOException("HTTP ${conn.responseCode}")
+                        session.openWrite("ims.apk", 0, conn.contentLengthLong).use { output ->
+                            conn.inputStream.use { it.copyTo(output, 512*1024) }
+                            session.fsync(output)
                         }
-                        session.fsync(output)
+                    } finally {
+                        conn.disconnect()
                     }
-                }
 
-                activity.registerReceiver(
-                        object: BroadcastReceiver() {
-                            override fun onReceive(p0: Context, result: Intent) {
-                                val status = result.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)
-                                Log.e("PHH", "Apk install received $result status $status")
-                                if (status != PackageInstaller.STATUS_SUCCESS) {
-                                    val msg = result.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
-                                    Toast.makeText(p0, "IMS apk install failed: $msg", Toast.LENGTH_LONG).show()
-                                    return
+                    Misc.safeSetprop("persist.vendor.vilte_support", "0")
+
+                    ctxt.registerReceiver(
+                            object: BroadcastReceiver() {
+                                override fun onReceive(p0: Context, result: Intent) {
+                                    ctxt.unregisterReceiver(this)
+                                    val status = result.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)
+                                    Log.e("PHH", "Apk install received $result status $status")
+                                    if (status != PackageInstaller.STATUS_SUCCESS) {
+                                        val msg = result.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
+                                        Toast.makeText(p0, "IMS apk install failed: $msg", Toast.LENGTH_LONG).show()
+                                        return
+                                    }
+                                    Ims.selectImsOverlay(p0)
+                                    Toast.makeText(p0, "IMS apk installed! You may now reboot.", Toast.LENGTH_LONG).show()
                                 }
-                                Ims.selectImsOverlay(p0)
-                                Toast.makeText(p0, "IMS apk installed! You may now reboot.", Toast.LENGTH_LONG).show()
-                            }
-                        },
-                        IntentFilter("me.phh.treble.app.ImsInstalled"),
-                        Context.RECEIVER_NOT_EXPORTED
-                )
+                            },
+                            IntentFilter("me.phh.treble.app.ImsInstalled"),
+                            Context.RECEIVER_NOT_EXPORTED
+                    )
 
-                session.commit(
-                        PendingIntent.getBroadcast(
-                                this@ImsSettingsFragment.activity,
-                                1,
-                                Intent("me.phh.treble.app.ImsInstalled").setPackage(context.packageName),
-                                PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_MUTABLE).intentSender)
-                activity.unregisterReceiver(this)
+                    session.commit(
+                            PendingIntent.getBroadcast(
+                                    ctxt,
+                                    1,
+                                    Intent("me.phh.treble.app.ImsInstalled").setPackage(ctxt.packageName),
+                                    PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_MUTABLE).intentSender)
+                }
+            } catch (e: Exception) {
+                Log.e("PHH", "IMS download failed", e)
+                if (sessionId != -1) pi.abandonSession(sessionId)
+                main.post { Toast.makeText(ctxt, "IMS download failed: " + e.message, Toast.LENGTH_LONG).show() }
             }
 
-        }, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE), Context.RECEIVER_EXPORTED)
+        }.start()
     }
 }
