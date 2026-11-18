@@ -3,6 +3,8 @@ package me.phh.treble.app
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.SharedPreferences
+import android.content.pm.PackageManager
+import android.content.pm.PermissionInfo
 import android.hardware.display.DisplayManager
 import android.net.ConnectivityManager
 import android.net.Network
@@ -11,6 +13,7 @@ import android.net.NetworkRequest
 import android.os.Parcel
 import android.os.ServiceManager
 import android.os.SystemProperties
+import android.os.UserHandle
 import android.preference.PreferenceManager
 import android.provider.Settings
 import android.util.Log
@@ -86,6 +89,35 @@ object Ims: EntryStartup {
     val gotHW = mAllSlots
             .find { i -> mHidlService.get("vendor.huawei.hardware.radio@1.0::IRadio", i) != null } != null
 
+    fun isImsStackEnabled(pm: PackageManager) = try {
+        pm.getApplicationEnabledSetting(ImsSettings.imsStackPackage) == PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+    } catch (e: IllegalArgumentException) {
+        false
+    }
+
+    // gsis keep the vendor fingerprint, so the default grants never rerun for an imsstack enabled after first boot
+    fun grantImsStackPermissions(pm: PackageManager) {
+        val pkg = try {
+            pm.getPackageInfo(ImsSettings.imsStackPackage, PackageManager.GET_PERMISSIONS)
+        } catch (e: PackageManager.NameNotFoundException) {
+            return
+        }
+        for (permission in pkg.requestedPermissions ?: return) {
+            val info = try {
+                pm.getPermissionInfo(permission, 0)
+            } catch (e: PackageManager.NameNotFoundException) {
+                continue
+            }
+            if (info.protection != PermissionInfo.PROTECTION_DANGEROUS) continue
+            if (pm.checkPermission(permission, pkg.packageName) == PackageManager.PERMISSION_GRANTED) continue
+            try {
+                pm.grantRuntimePermission(pkg.packageName, permission, UserHandle.SYSTEM)
+            } catch (e: Exception) {
+                Log.w("PHH", "Failed granting $permission to ${pkg.packageName}", e)
+            }
+        }
+    }
+
     override fun startup(ctxt: Context) {
         if (!ImsSettings.enabled()) return
 
@@ -105,10 +137,13 @@ object Ims: EntryStartup {
         val installed = ctxt.packageManager.getInstalledPackages(0).map { it.packageName }
         val gotLangsdorffFloss = "com.langsdorff.flossims" in installed
         val gotFloss = gotLangsdorffFloss || "me.phh.ims" in installed
+        val gotImsStack = isImsStackEnabled(ctxt.packageManager)
+
 
         val allOverlays = listOf("me.phh.treble.overlay.mtkims_telephony", "me.phh.treble.overlay.cafims_telephony", "me.phh.treble.overlay.hwims_telephony",
-                "me.phh.treble.overlay.flossims_telephony", "com.langsdorff.overlay.ims_telephony")
+                "me.phh.treble.overlay.flossims_telephony", "com.langsdorff.overlay.ims_telephony", "com.android.overlay.imsstack_telephony")
         val selectOverlay = when {
+            gotImsStack -> "com.android.overlay.imsstack_telephony"
             gotLangsdorffFloss -> "com.langsdorff.overlay.ims_telephony"
             gotFloss -> "me.phh.treble.overlay.flossims_telephony"
             gotMtkP || gotMtkQ || gotMtkR || gotMtkS || gotMtkAidl -> "me.phh.treble.overlay.mtkims_telephony"
@@ -118,11 +153,9 @@ object Ims: EntryStartup {
             gotHW -> "me.phh.treble.overlay.hwims_telephony"
             else -> null
         }
-        if (gotFloss) {
-            Misc.safeSetprop("persist.sys.phh.ims.floss", "true")
-        } else {
-            Misc.safeSetprop("persist.sys.phh.ims.floss", "false")
-        }
+        if (gotImsStack) grantImsStackPermissions(ctxt.packageManager)
+        Misc.safeSetprop("persist.sys.phh.ims.aosp", if (gotImsStack) "true" else "false")
+        Misc.safeSetprop("persist.sys.phh.ims.floss", if (gotFloss && !gotImsStack) "true" else "false")
         if(selectOverlay != null) {
             allOverlays
                     .filter { it != selectOverlay }

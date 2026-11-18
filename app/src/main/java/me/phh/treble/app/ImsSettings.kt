@@ -4,6 +4,7 @@ import android.app.AlertDialog
 import android.app.Application
 import android.app.PendingIntent
 import android.content.*
+import android.content.pm.PackageManager
 import android.content.pm.PackageInstaller
 import android.hardware.display.DisplayManager
 import android.net.Uri
@@ -19,6 +20,7 @@ import android.widget.Toast
 import androidx.core.content.FileProvider
 import androidx.preference.ListPreference
 import androidx.preference.Preference
+import androidx.preference.SwitchPreferenceCompat
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.IOException
@@ -30,6 +32,8 @@ object ImsSettings : Settings {
     val createApn = "key_ims_create_apn"
     val forceEnableSettings = "key_ims_force_enable_setting"
     val installImsApk = "key_ims_install_apn"
+    val useImsStack = "key_ims_use_imsstack"
+    val imsStackPackage = "com.android.imsstack"
     val flossLangsdorffUrl = "https://github.com/clangsdorff/ims/releases/latest/download/FlossIms.apk"
 
 
@@ -89,6 +93,24 @@ class ImsSettingsFragment : SettingsFragment() {
             Log.d("PHH", "Insert APN returned $res")
 
             return@setOnPreferenceClickListener true
+        }
+
+        // the package ships disabled, so its enabled state is the source of truth, not the preference
+        val useImsStack = findPreference<SwitchPreferenceCompat>(ImsSettings.useImsStack)
+        useImsStack!!.isChecked = Ims.isImsStackEnabled(requireActivity().packageManager)
+        useImsStack.setOnPreferenceChangeListener { _, newValue ->
+            val ctxt = requireActivity().applicationContext
+            val state = if (newValue as Boolean) PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+                    else PackageManager.COMPONENT_ENABLED_STATE_DEFAULT
+            try {
+                ctxt.packageManager.setApplicationEnabledSetting(ImsSettings.imsStackPackage, state, 0)
+            } catch (e: IllegalArgumentException) {
+                Toast.makeText(ctxt, "AOSP IMS stack is not part of this build", Toast.LENGTH_LONG).show()
+                return@setOnPreferenceChangeListener false
+            }
+            Ims.selectImsOverlay(ctxt)
+            Toast.makeText(ctxt, "Reboot to apply the IMS change", Toast.LENGTH_LONG).show()
+            true
         }
 
         val installIms = findPreference<Preference>(ImsSettings.installImsApk)

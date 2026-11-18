@@ -3,6 +3,13 @@
 	xmlns:android="http://schemas.android.com/apk/res/android">
     <Preference android:title="Create IMS APN"
         android:key="key_ims_create_apn" />
+    <SwitchPreferenceCompat
+        android:defaultValue="false"
+        android:persistent="false"
+        android:key="key_ims_use_imsstack"
+        android:title="Use the AOSP IMS stack"
+        android:summaryOff="Experimental. Runs VoLTE on the AP like FlossIMS, takes priority over any installed IMS APK"
+        android:summaryOn="Active. If VoLTE stays off after a reboot, set it to Forced available in Settings &gt; Network &amp; internet &gt; SIMs &gt; Carrier settings overrides" />
     <Preference android:title="Download and install IMS APK"
         android:key="key_ims_install_apn" />
     <SwitchPreference
