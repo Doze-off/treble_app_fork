@@ -64,6 +64,11 @@ object MiscSettings : Settings {
     val escoTransportUnitSize = "key_misc_esco_transport_unit_size"
     val disableLeApcfExtended = "key_misc_disable_le_apcfe"
     val treatVirtualSensorsAsReal = "key_misc_treat_virtual_sensors_as_real"
+    val scrollBoost = "key_misc_scroll_boost"
+    val trafficFix = "key_misc_traffic_indicator"
+    val sfRenderEngineBackend = "key_display_sf_renderengine_backend"
+    val sfHwuiBackend = "key_display_sf_hwui_backend"
+    val sfBlurAlgorithm = "key_display_sf_blur_algorithm"
 
     override fun enabled() = true
 }

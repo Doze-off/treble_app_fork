@@ -426,6 +426,26 @@ object Misc: EntryStartup {
                 val value = sp.getBoolean(key, false)
                 SystemProperties.set("persist.sys.phh.virtual_sensors_are_real", if (value) "1" else "0")
             }
+            MiscSettings.scrollBoost -> {
+                val value = sp.getBoolean(key, false)
+                SystemProperties.set("persist.sys.phh.scroll_boost", if (value) "true" else "false")
+            }
+            MiscSettings.trafficFix -> {
+                val value = sp.getBoolean(key, true)
+                SystemProperties.set("persist.sys.phh.traffic_indicator_fallback", if (value) "true" else "false")
+            }
+            MiscSettings.sfBlurAlgorithm -> {
+                val value = sp.getString(key, "kawase")
+                SystemProperties.set("persist.sys.phh.sf.background_blur", value)
+            }
+            MiscSettings.sfRenderEngineBackend -> {
+                val value = sp.getString(key, "")
+                SystemProperties.set("persist.sys.phh.sf.renderengine.backend", value)
+            }
+            MiscSettings.sfHwuiBackend -> {
+                val value = sp.getString(key, "")
+                SystemProperties.set("persist.sys.phh.sf.debug.renderengine.backend", value)
+            }
         }
     }
 

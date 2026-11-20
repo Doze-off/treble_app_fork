@@ -161,6 +161,32 @@
             android:key="key_misc_force_navbar_off"
             android:title="Force navigation bar disabled"
             android:summary="Requires a reboot" />
+        <ListPreference
+            android:defaultValue=""
+            android:entries="@array/pref_display_sf_renderengine_backend"
+            android:entryValues="@array/pref_display_sf_renderengine_backend_values"
+            android:key="key_display_sf_renderengine_backend"
+            android:title="Render Engine"
+            android:summary="Reboot is required to apply it" />
+        <ListPreference
+            android:defaultValue=""
+            android:entries="@array/pref_display_hwui_backend"
+            android:entryValues="@array/pref_display_hwui_backend_values"
+            android:key="key_display_sf_hwui_backend"
+            android:title="Render Hardware UI"
+            android:summary="Reboot is required to apply it" />
+        <ListPreference
+            android:defaultValue="kawase"
+            android:entries="@array/pref_display_sf_blur_algorithm"
+            android:entryValues="@array/pref_display_sf_blur_algorithm_values"
+            android:key="key_display_sf_blur_algorithm"
+            android:title="Blur Mecanism"
+            android:summary="Reboot is required to apply it" />
+        <SwitchPreference
+            android:defaultValue="false"
+            android:key="key_misc_scroll_boost"
+            android:title="Scroll Boost"
+            android:summary="Improves scrolling smoothness by applying a temporary performance boost during scroll gestures. On heavier apps, it may use a more aggressive performance profile depending on vendor support. On low-RAM devices, this may increase memory pressure and reduce smoothness in some situations." />
     </PreferenceCategory>
     <PreferenceCategory android:title="Backlight">
         <SwitchPreference
@@ -294,6 +320,11 @@
             android:key="key_misc_treat_virtual_sensors_as_real"
             android:title="Treat virtual sensors as real"
             android:summary="Treat all virtual fingerprint sensors as real\nRequires a reboot" />
+        <SwitchPreference
+            android:defaultValue="true"
+            android:key="key_misc_traffic_indicator"
+            android:title="Universal legacy-kernel BPF fallback"
+            android:summary="ON (true): uses the real kernel version and enables the safer traffic-statistics fallback. Recommended for older kernels and may keep the traffic indicator working. OFF (false): reports kernel 5.10.239 to enable the full BPF compatibility path and may fix firewall-bypass connectivity. Disabling the fallback can break the traffic indicator or cause a black screen, OEM screen, Wi-Fi boot failure, or bootloader issue on unsupported devices. Reboot required. This patch is universal for supported SoC vendors. The MTK BPF Patcher is optional and only applies to supported MediaTek kernels." />
     </PreferenceCategory>
     <PreferenceCategory android:title="Debugging">
         <Preference android:title="Debug Sensors">
